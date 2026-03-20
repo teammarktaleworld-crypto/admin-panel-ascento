@@ -1,0 +1,818 @@
+{
+  "info": {
+    "name": "Ascento Admin Complete Routes Collection",
+    "description": "Complete admin route flow using real payload shapes from code. Run in order.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://ascento-abacus-backend.onrender.com/api" },
+    { "key": "adminEmail", "value": "admin@school.com" },
+    { "key": "adminPassword", "value": "admin@123" },
+    { "key": "adminNewPassword", "value": "admin@123" },
+
+    { "key": "sessionKey", "value": "" },
+
+    { "key": "domainId", "value": "" },
+    { "key": "classId", "value": "" },
+    { "key": "sectionId", "value": "" },
+    { "key": "subjectId", "value": "" },
+    { "key": "teacherId", "value": "" },
+    { "key": "studentId", "value": "" },
+    { "key": "timetableId", "value": "" },
+    { "key": "timetableId2", "value": "" },
+    { "key": "timetableId3", "value": "" },
+    { "key": "assignmentId", "value": "" },
+
+    { "key": "teacherLoginEmail", "value": "" },
+    { "key": "teacherLoginUserId", "value": "" },
+    { "key": "teacherLoginPassword", "value": "" },
+    { "key": "teacherNewPassword", "value": "Teacher@123" },
+    { "key": "teacherSessionKey", "value": "" },
+    { "key": "studentLoginEmail", "value": "" },
+    { "key": "studentLoginPassword", "value": "Student@123" },
+    { "key": "studentSessionKey", "value": "" },
+
+    { "key": "academicYearId", "value": "" },
+    { "key": "examId", "value": "" },
+    { "key": "examSubjectId", "value": "" },
+    { "key": "feeId", "value": "" },
+
+    { "key": "existingStudentId", "value": "" },
+    { "key": "existingFromClassId", "value": "" },
+    { "key": "existingFromSectionId", "value": "" },
+    { "key": "existingEnquiryId", "value": "" },
+
+    { "key": "suffix", "value": "{{$timestamp}}" }
+  ],
+  "tests": [
+    {
+      "name": "Create Student",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/admin/students",
+        "headers": {
+          "Content-Type": "application/json",
+          "x-session-key": "{{sessionKey}}"
+        },
+        "body": {
+          "fullName": "Test Student {{suffix}}",
+          "parentName": "Test Parent",
+          "parentPhone": "9999999999",
+          "parentEmail": "test.student.{{suffix}}@school.com",
+          "domainId": "{{domainId}}",
+          "gender": "male",
+          "dateOfBirth": "2012-01-01",
+          "address": "123 Test Lane",
+          "city": "Test City",
+          "state": "Test State",
+          "bloodGroup": "O+"
+        }
+      },
+      "test": "pm.test('Student created', function () { pm.response.to.have.status(201); });\nconst json = pm.response.json();\npm.collectionVariables.set('studentId', json.data.student.id);\npm.collectionVariables.set('studentLoginEmail', json.data.student.parentEmail);\npm.collectionVariables.set('studentLoginPassword', json.data.temporaryPassword);"
+    },
+    {
+      "name": "Student Login",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/auth/login",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "email": "{{studentLoginEmail}}",
+          "password": "{{studentLoginPassword}}",
+          "role": "student"
+        }
+      },
+      "test": "pm.test('Student login success', function () { pm.response.to.have.status(200); });\nconst json = pm.response.json();\npm.collectionVariables.set('studentSessionKey', json.data.sessionKey);"
+    }
+  ],
+  "item": [
+    {
+      "name": "00 - Admin Access",
+      "item": [
+        {
+          "name": "01 Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('sessionKey', json.data.sessionKey);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/admin/login"
+          }
+        },
+        {
+          "name": "02 Profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }],
+            "url": "{{baseUrl}}/admin/profile"
+          }
+        },
+        {
+          "name": "03 Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }],
+            "url": "{{baseUrl}}/admin/dashboard"
+          }
+        },
+        {
+          "name": "04 Change Password (Optional)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{adminPassword}}\",\n  \"newPassword\": \"{{adminNewPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/admin/change-password"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Domains Routes",
+      "item": [
+        {
+          "name": "01 Create Domain",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('domainId', json.data._id);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Science Stream {{suffix}}\",\n  \"code\": \"SCI{{suffix}}\",\n  \"description\": \"Science curriculum\",\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/admin/domains"
+          }
+        },
+        {
+          "name": "02 List Domains",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/domains" }
+        },
+        {
+          "name": "03 Get Domain By Id",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/domains/{{domainId}}" }
+        },
+        {
+          "name": "04 Update Domain",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Science curriculum and lab focus\",\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/admin/domains/{{domainId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Classes Routes",
+      "item": [
+        {
+          "name": "01 Create Class",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('classId', json.data._id);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Grade 8 {{suffix}}\",\n  \"domainId\": \"{{domainId}}\",\n  \"description\": \"Middle school grade 8\"\n}" },
+            "url": "{{baseUrl}}/admin/classes"
+          }
+        },
+        {
+          "name": "02 List Classes",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/classes" }
+        },
+        {
+          "name": "03 Get Class By Id",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/classes/{{classId}}" }
+        },
+        {
+          "name": "04 Update Class",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Grade 8 - updated description\"\n}" },
+            "url": "{{baseUrl}}/admin/classes/{{classId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Sections Routes",
+      "item": [
+        {
+          "name": "01 Create Section",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('sectionId', json.data._id);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Section A {{suffix}}\",\n  \"classId\": \"{{classId}}\"\n}" },
+            "url": "{{baseUrl}}/admin/sections"
+          }
+        },
+        {
+          "name": "02 List Sections",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/sections?classId={{classId}}" }
+        },
+        {
+          "name": "03 Update Section",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Section B {{suffix}}\"\n}" },
+            "url": "{{baseUrl}}/admin/sections/{{sectionId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Subjects Routes",
+      "item": [
+        {
+          "name": "01 Create Subject",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('subjectId', json.data._id);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Mathematics {{suffix}}\",\n  \"code\": \"MATH{{suffix}}\",\n  \"classId\": \"{{classId}}\",\n  \"description\": \"Mathematics for grade 8\"\n}" },
+            "url": "{{baseUrl}}/admin/subjects"
+          }
+        },
+        {
+          "name": "02 List Subjects",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/subjects?classId={{classId}}" }
+        },
+        {
+          "name": "03 Get Subject By Id",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/subjects/{{subjectId}}" }
+        },
+        {
+          "name": "04 Update Subject",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Mathematics theory and practical\"\n}" },
+            "url": "{{baseUrl}}/admin/subjects/{{subjectId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Teachers And Assignments Routes",
+      "item": [
+        {
+          "name": "01 Create Teacher",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('teacherId', json.data.teacher._id);", "pm.collectionVariables.set('teacherLoginEmail', json.data.teacherEmail);", "pm.collectionVariables.set('teacherLoginUserId', json.data.teacher.userId);", "pm.collectionVariables.set('teacherLoginPassword', json.data.temporaryPassword);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Aarav Sharma\",\n  \"email\": \"aarav.sharma.{{suffix}}@school.com\",\n  \"phone\": \"98{{suffix}}\",\n  \"domainId\": \"{{domainId}}\",\n  \"status\": \"active\",\n  \"address\": \"123 Main Street\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"country\": \"India\",\n  \"dateOfBirth\": \"1985-06-15\",\n  \"gender\": \"male\",\n  \"qualification\": \"M.Sc. Mathematics\",\n  \"experienceYears\": 10,\n  \"joiningDate\": \"2020-04-01\",\n  \"profilePhoto\": \"https://res.cloudinary.com/demo/image/upload/sample.jpg\"\n}"
+            },
+            "url": "{{baseUrl}}/admin/teachers"
+          }
+        },
+        {
+          "name": "02 List Teachers",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/teachers" }
+        },
+        {
+          "name": "03 Get Teacher By Id",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/teachers/{{teacherId}}" }
+        },
+        {
+          "name": "04 Update Teacher",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+              "body": { "mode": "raw", "raw": "{\n  \"name\": \"Aarav Sharma Senior\",\n  \"email\": \"aarav.sharma@school.com\",\n  \"phone\": \"9876543210\",\n  \"domainId\": \"{{domainId}}\",\n  \"status\": \"active\",\n  \"address\": \"123 Main Street\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"country\": \"India\",\n  \"dateOfBirth\": \"1985-06-15\",\n  \"gender\": \"male\",\n  \"qualification\": \"M.Sc. Mathematics\",\n  \"experienceYears\": 10,\n  \"joiningDate\": \"2020-04-01\",\n  \"profilePhoto\": \"https://res.cloudinary.com/demo/image/upload/sample.jpg\"\n}" },
+            "url": "{{baseUrl}}/admin/teachers/{{teacherId}}"
+          }
+        },
+        {
+          "name": "05 Assign Teacher",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('assignmentId', json.data._id);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"teacherId\": \"{{teacherId}}\",\n  \"classId\": \"{{classId}}\",\n  \"sectionId\": \"{{sectionId}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"academicYear\": \"2026-2027\",\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/admin/assign-teacher"
+          }
+        },
+        {
+          "name": "06 List Teacher Assignments",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/teacher-assignments" }
+        },
+        {
+          "name": "07 Update Teacher Assignment",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/admin/teacher-assignments/{{assignmentId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Academic Years And Exams Routes",
+      "item": [
+        {
+          "name": "01 Create Academic Year",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('academicYearId', json.data._id);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"2026-2027-{{suffix}}\",\n  \"startDate\": \"2026-04-01\",\n  \"endDate\": \"2027-03-31\",\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/admin/academic-years"
+          }
+        },
+        {
+          "name": "02 List Academic Years",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/academic-years" }
+        },
+        {
+          "name": "03 Get Academic Year By Id",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/academic-years/{{academicYearId}}" }
+        },
+        {
+          "name": "04 Update Academic Year",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/admin/academic-years/{{academicYearId}}"
+          }
+        },
+        {
+          "name": "05 Create Exam",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('examId', json.data._id);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"examName\": \"Mid Term {{suffix}}\",\n  \"classId\": \"{{classId}}\",\n  \"academicYearId\": \"{{academicYearId}}\",\n  \"examStartDate\": \"2026-09-10\",\n  \"examEndDate\": \"2026-09-20\",\n  \"description\": \"Mid term written examinations\",\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/admin/exams"
+          }
+        },
+        {
+          "name": "06 List Exams",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/exams?classId={{classId}}&academicYearId={{academicYearId}}" }
+        },
+        {
+          "name": "07 Get Exam By Id",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/exams/{{examId}}" }
+        },
+        {
+          "name": "08 Update Exam",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"examName\": \"Mid Term Revised {{suffix}}\",\n  \"description\": \"Updated timetable\"\n}" },
+            "url": "{{baseUrl}}/admin/exams/{{examId}}"
+          }
+        },
+        {
+          "name": "09 Create Exam Subject",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('examSubjectId', json.data._id);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"examId\": \"{{examId}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"totalMarks\": 100,\n  \"passingMarks\": 35,\n  \"examDate\": \"2026-09-15\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"12:00\"\n}" },
+            "url": "{{baseUrl}}/admin/exam-subject"
+          }
+        },
+        {
+          "name": "10 List Exam Subjects",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/exam-subjects/{{examId}}" }
+        },
+        {
+          "name": "11 Update Exam Subject",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"totalMarks\": 80,\n  \"passingMarks\": 28,\n  \"startTime\": \"09:30\",\n  \"endTime\": \"11:30\"\n}" },
+            "url": "{{baseUrl}}/admin/exam-subject/{{examSubjectId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Enrollment Attendance Report Fees Routes",
+      "item": [
+        {
+          "name": "01 Create Student",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('studentId', json.data.student._id);", "pm.collectionVariables.set('studentLoginEmail', json.data.studentLoginEmail);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"fullName\": \"Student Test {{suffix}}\",\n  \"dob\": \"2012-05-10\",\n  \"age\": 13,\n  \"gender\": \"male\",\n  \"parentName\": \"Parent Test\",\n  \"parentPhone\": \"98{{suffix}}\",\n  \"parentEmail\": \"student.parent.{{suffix}}@school.com\",\n  \"domainId\": \"{{domainId}}\",\n  \"password\": \"Student@123\",\n  \"status\": \"active\",\n  \"address\": \"12 School Road\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"bloodGroup\": \"O+\"\n}" },
+            "url": "{{baseUrl}}/admin/students"
+          }
+        },
+        {
+          "name": "02 List Students",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/students?domainId={{domainId}}" }
+        },
+        {
+          "name": "03 Get Student By Id",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/students/{{studentId}}" }
+        },
+        {
+          "name": "04 Update Student",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"active\",\n  \"city\": \"Pune\"\n}" },
+            "url": "{{baseUrl}}/admin/students/{{studentId}}"
+          }
+        },
+        {
+          "name": "05 Enroll Student",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"studentId\": \"{{existingStudentId}}\",\n  \"classId\": \"{{classId}}\",\n  \"sectionId\": \"{{sectionId}}\",\n  \"academicYear\": \"2026-2027\",\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/admin/enroll-student"
+          }
+        },
+        {
+          "name": "06 Promote Student",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"studentId\": \"{{existingStudentId}}\",\n  \"fromClassId\": \"{{existingFromClassId}}\",\n  \"toClassId\": \"{{classId}}\",\n  \"fromSectionId\": \"{{existingFromSectionId}}\",\n  \"toSectionId\": \"{{sectionId}}\",\n  \"newAcademicYear\": \"2026-2027\"\n}" },
+            "url": "{{baseUrl}}/admin/promote-student"
+          }
+        },
+        {
+          "name": "07 List Enrollments",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/enrollments?studentId={{existingStudentId}}" }
+        },
+        {
+          "name": "08 Attendance List",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/attendance?studentId={{existingStudentId}}&classId={{classId}}&sectionId={{sectionId}}&academicYear=2026-2027" }
+        },
+        {
+          "name": "09 Student Report Card",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/report-card/{{existingStudentId}}?examId={{examId}}" }
+        },
+        {
+          "name": "10 Create Fee",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('feeId', json.data._id);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"studentId\": \"{{existingStudentId}}\",\n  \"classId\": \"{{classId}}\",\n  \"academicYearId\": \"{{academicYearId}}\",\n  \"feeType\": \"tuition\",\n  \"amount\": 15000,\n  \"dueDate\": \"2026-06-30\",\n  \"paymentStatus\": \"pending\"\n}" },
+            "url": "{{baseUrl}}/admin/fees"
+          }
+        },
+        {
+          "name": "11 List Fees",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/fees?studentId={{existingStudentId}}&academicYearId={{academicYearId}}" }
+        },
+        {
+          "name": "12 Mark Fee Paid",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"feeId\": \"{{feeId}}\",\n  \"paymentMethod\": \"upi\",\n  \"transactionReference\": \"TXN-SCHOOL-{{suffix}}\",\n  \"paymentDate\": \"2026-04-01\"\n}" },
+            "url": "{{baseUrl}}/admin/fees/pay"
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Communication And Enquiry Routes",
+      "item": [
+        {
+          "name": "01 Create Reminder",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Fee Payment Reminder\",\n  \"description\": \"Please clear pending fee before due date\",\n  \"targetType\": \"class\",\n  \"targetId\": \"{{classId}}\",\n  \"reminderDate\": \"2026-04-15\"\n}" },
+            "url": "{{baseUrl}}/admin/reminders"
+          }
+        },
+        {
+          "name": "02 Create Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Annual Sports Day\",\n  \"description\": \"School-wide athletics and games\",\n  \"eventDate\": \"2026-12-20\",\n  \"location\": \"Main Ground\",\n  \"attachments\": [\"https://example.com/notice/sports-day.pdf\"]\n}" },
+            "url": "{{baseUrl}}/admin/events"
+          }
+        },
+        {
+          "name": "03 Create Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Platform Maintenance\",\n  \"message\": \"Portal update scheduled at 10 PM\",\n  \"targetType\": \"broadcast\",\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/admin/notifications"
+          }
+        },
+        {
+          "name": "04 List Enquiries",
+          "request": { "method": "GET", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/enquiries" }
+        },
+        {
+          "name": "05 Update Enquiry",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"in-progress\",\n  \"message\": \"Admission details shared via email\"\n}" },
+            "url": "{{baseUrl}}/admin/enquiries/{{existingEnquiryId}}"
+          }
+        },
+        {
+          "name": "06 Delete Enquiry",
+          "request": { "method": "DELETE", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/enquiries/{{existingEnquiryId}}" }
+        }
+      ]
+    },
+    {
+      "name": "09 - Timetable Routes (Day x Period)",
+      "item": [
+        {
+          "name": "01 Teacher Login For Timetable",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('teacherSessionKey', json.data.sessionKey);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"identifier\": \"{{teacherLoginUserId}}\",\n  \"password\": \"{{teacherLoginPassword}}\",\n  \"role\": \"teacher\"\n}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "02a Teacher First Login - Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{teacherSessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"currentPassword\": \"{{teacherLoginPassword}}\",\n  \"newPassword\": \"{{teacherNewPassword}}\"\n}" },
+            "url": "{{baseUrl}}/teachers/change-password"
+          }
+        },
+        {
+          "name": "02b Teacher Login With Permanent Password",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('teacherSessionKey', json.data.sessionKey);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"identifier\": \"{{teacherLoginUserId}}\",\n  \"password\": \"{{teacherNewPassword}}\",\n  \"role\": \"teacher\"\n}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "03 Student Login For Timetable",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('studentSessionKey', json.data.sessionKey);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{studentLoginEmail}}\",\n  \"password\": \"{{studentLoginPassword}}\",\n  \"role\": \"student\"\n}" },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "03 Create Timetable Period 1",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('timetableId', json.data._id);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"classId\": \"{{classId}}\",\n  \"sectionId\": \"{{sectionId}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"teacherId\": \"{{teacherId}}\",\n  \"academicYearId\": \"{{academicYearId}}\",\n  \"dayOfWeek\": \"monday\",\n  \"periodNumber\": 1,\n  \"startTime\": \"09:00\",\n  \"endTime\": \"09:45\",\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/admin/timetable"
+          }
+        },
+        {
+          "name": "04 Create Timetable Period 2",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('timetableId2', json.data._id);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"classId\": \"{{classId}}\",\n  \"sectionId\": \"{{sectionId}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"teacherId\": \"{{teacherId}}\",\n  \"academicYearId\": \"{{academicYearId}}\",\n  \"dayOfWeek\": \"monday\",\n  \"periodNumber\": 2,\n  \"startTime\": \"09:45\",\n  \"endTime\": \"10:30\",\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/admin/timetable"
+          }
+        },
+        {
+          "name": "05 Create Timetable Period 3",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const json = pm.response.json();", "pm.collectionVariables.set('timetableId3', json.data._id);"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"classId\": \"{{classId}}\",\n  \"sectionId\": \"{{sectionId}}\",\n  \"subjectId\": \"{{subjectId}}\",\n  \"teacherId\": \"{{teacherId}}\",\n  \"academicYearId\": \"{{academicYearId}}\",\n  \"dayOfWeek\": \"monday\",\n  \"periodNumber\": 3,\n  \"startTime\": \"10:30\",\n  \"endTime\": \"11:15\",\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/admin/timetable"
+          }
+        },
+        {
+          "name": "06 Class Timetable Day x Period",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }],
+            "url": "{{baseUrl}}/class/timetable/{{classId}}?sectionId={{sectionId}}&academicYearId={{academicYearId}}&status=active"
+          }
+        },
+        {
+          "name": "07 Teacher Timetable",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-session-key", "value": "{{teacherSessionKey}}" }],
+            "url": "{{baseUrl}}/teacher/timetable?academicYearId={{academicYearId}}&status=active"
+          }
+        },
+        {
+          "name": "08 Student Timetable",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-session-key", "value": "{{studentSessionKey}}" }],
+            "url": "{{baseUrl}}/student/timetable?academicYearId={{academicYearId}}&status=active"
+          }
+        },
+        {
+          "name": "09 Update Timetable Period 1",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-session-key", "value": "{{sessionKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"startTime\": \"09:05\",\n  \"endTime\": \"09:50\",\n  \"status\": \"active\"\n}" },
+            "url": "{{baseUrl}}/admin/timetable/{{timetableId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 - Cleanup And Logout",
+      "item": [
+        {
+          "name": "01 Delete Student",
+          "request": { "method": "DELETE", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/students/{{studentId}}" }
+        },
+        {
+          "name": "02 Delete Timetable Period 3",
+          "request": { "method": "DELETE", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/timetable/{{timetableId3}}" }
+        },
+        {
+          "name": "03 Delete Timetable Period 2",
+          "request": { "method": "DELETE", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/timetable/{{timetableId2}}" }
+        },
+        {
+          "name": "04 Delete Timetable Period 1",
+          "request": { "method": "DELETE", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/timetable/{{timetableId}}" }
+        },
+        {
+          "name": "05 Delete Exam Subject",
+          "request": { "method": "DELETE", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/exam-subject/{{examSubjectId}}" }
+        },
+        {
+          "name": "06 Delete Exam",
+          "request": { "method": "DELETE", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/exams/{{examId}}" }
+        },
+        {
+          "name": "07 Delete Teacher Assignment",
+          "request": { "method": "DELETE", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/teacher-assignments/{{assignmentId}}" }
+        },
+        {
+          "name": "08 Delete Teacher",
+          "request": { "method": "DELETE", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/teachers/{{teacherId}}" }
+        },
+        {
+          "name": "09 Delete Subject",
+          "request": { "method": "DELETE", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/subjects/{{subjectId}}" }
+        },
+        {
+          "name": "10 Delete Section",
+          "request": { "method": "DELETE", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/sections/{{sectionId}}" }
+        },
+        {
+          "name": "11 Delete Class",
+          "request": { "method": "DELETE", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/classes/{{classId}}" }
+        },
+        {
+          "name": "12 Delete Domain",
+          "request": { "method": "DELETE", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/domains/{{domainId}}" }
+        },
+        {
+          "name": "13 Delete Academic Year",
+          "request": { "method": "DELETE", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/admin/academic-years/{{academicYearId}}" }
+        },
+        {
+          "name": "14 Logout",
+          "request": { "method": "POST", "header": [{ "key": "x-session-key", "value": "{{sessionKey}}" }], "url": "{{baseUrl}}/auth/admin/logout" }
+        }
+      ]
+    }
+  ]
+}
