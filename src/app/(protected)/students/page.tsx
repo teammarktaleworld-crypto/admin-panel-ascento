@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, RefreshCcw, Search, Trash2, Users } from "lucide-react";
+import { Copy, Pencil, Plus, RefreshCcw, Search, Trash2, Users } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 
@@ -53,6 +53,12 @@ type StudentFormState = {
   bloodGroup: string;
 };
 
+type CreatedStudentCredentials = {
+  fullName: string;
+  email: string;
+  temporaryPassword: string;
+};
+
 function toRows(data: unknown): Array<Record<string, unknown>> {
   if (Array.isArray(data)) {
     return data as Array<Record<string, unknown>>;
@@ -89,7 +95,7 @@ function defaultForm(): StudentFormState {
     parentPhone: "",
     parentEmail: "",
     domainId: "",
-    password: "Student@123",
+    password: "",
     status: "active",
     address: "",
     city: "",
@@ -121,6 +127,29 @@ function toForm(row: StudentRow): StudentFormState {
   };
 }
 
+function readPath(source: unknown, path: string): unknown {
+  if (!source || typeof source !== "object") {
+    return undefined;
+  }
+
+  return path.split(".").reduce<unknown>((current, segment) => {
+    if (!current || typeof current !== "object") {
+      return undefined;
+    }
+    return (current as Record<string, unknown>)[segment];
+  }, source);
+}
+
+function pickString(source: unknown, paths: string[]): string {
+  for (const path of paths) {
+    const value = readPath(source, path);
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
 export default function StudentsPage() {
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (axios.isAxiosError(error)) {
@@ -140,6 +169,8 @@ export default function StudentsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [domainFilter, setDomainFilter] = useState("all");
   const [form, setForm] = useState<StudentFormState>(defaultForm());
+  const [createdStudentCredentials, setCreatedStudentCredentials] = useState<CreatedStudentCredentials | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 
   const studentsQuery = useQuery({
     queryKey: ["students"],
@@ -184,9 +215,34 @@ export default function StudentsPage() {
 
   const createMutation = useMutation({
     mutationFn: async () => studentsApi.create(form),
-    onSuccess: async () => {
+    onSuccess: async (response) => {
+      const temporaryPassword = pickString(response, [
+        "temporaryPassword",
+        "tempPassword",
+        "password",
+        "credentials.temporaryPassword",
+        "credentials.tempPassword",
+        "credentials.password",
+        "user.temporaryPassword",
+        "user.tempPassword",
+      ]);
+      const fullName = pickString(response, ["fullName", "name", "student.fullName", "student.name", "user.name"]) || form.fullName;
+      const email =
+        pickString(response, ["email", "student.email", "user.email", "parentEmail", "student.parentEmail"]) || form.parentEmail;
+
       toast.success("Student created");
       closeModal();
+
+      if (temporaryPassword) {
+        setCreatedStudentCredentials({
+          fullName,
+          email,
+          temporaryPassword,
+        });
+      } else {
+        toast.warning("Student created, but temporary password was not returned by API.");
+      }
+
       await queryClient.invalidateQueries({ queryKey: ["students"] });
     },
     onError: (error) => toast.error(getErrorMessage(error, "Failed to create student")),
@@ -237,11 +293,35 @@ export default function StudentsPage() {
     if (!row._id) {
       return;
     }
-    const ok = window.confirm(`Delete student ${row.fullName || "record"}?`);
-    if (!ok) {
+    setPendingDelete({
+      id: String(row._id),
+      name: String(row.fullName || "this student"),
+    });
+  };
+
+  const confirmDelete = () => {
+    if (!pendingDelete) {
       return;
     }
-    deleteMutation.mutate(String(row._id));
+
+    deleteMutation.mutate(pendingDelete.id, {
+      onSuccess: () => {
+        setPendingDelete(null);
+      },
+    });
+  };
+
+  const handleCopyTemporaryPassword = async () => {
+    if (!createdStudentCredentials?.temporaryPassword) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(createdStudentCredentials.temporaryPassword);
+      toast.success("Temporary password copied");
+    } catch {
+      toast.error("Unable to copy password. Please copy it manually.");
+    }
   };
 
   const isPageLoading = studentsQuery.isLoading || domainsQuery.isLoading;
@@ -445,11 +525,6 @@ export default function StudentsPage() {
               return;
             }
 
-            if (!editingId && !form.password) {
-              toast.error("Password is required for new student");
-              return;
-            }
-
             if (editingId) {
               await updateMutation.mutateAsync();
               return;
@@ -507,8 +582,12 @@ export default function StudentsPage() {
 
           {!editingId ? (
             <div>
-              <p className="mb-1 text-xs text-zinc-500">Password</p>
-              <Input value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} required />
+              <p className="mb-1 text-xs text-zinc-500">Password (Optional)</p>
+              <Input
+                value={form.password}
+                placeholder="Leave blank to auto-generate temporary password"
+                onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+              />
             </div>
           ) : null}
 
@@ -551,6 +630,73 @@ export default function StudentsPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={Boolean(createdStudentCredentials)}
+        onClose={() => setCreatedStudentCredentials(null)}
+        title="Student Temporary Password"
+      >
+        {createdStudentCredentials ? (
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-600 dark:text-zinc-300">
+              Share this password with <span className="font-medium">{createdStudentCredentials.fullName || "the student"}</span> for first login.
+              This is shown only once.
+            </p>
+
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950/40">
+              <p className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-300">Login Email</p>
+              <p className="mt-1 break-all text-sm font-medium text-zinc-900 dark:text-zinc-100">{createdStudentCredentials.email}</p>
+
+              <p className="mt-3 text-xs uppercase tracking-wide text-amber-700 dark:text-amber-300">Temporary Password</p>
+              <p className="mt-1 break-all rounded border border-amber-300 bg-white px-2 py-2 font-mono text-sm font-semibold text-zinc-900 dark:border-amber-700 dark:bg-zinc-950 dark:text-zinc-100">
+                {createdStudentCredentials.temporaryPassword}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <Button type="button" variant="outline" onClick={handleCopyTemporaryPassword}>
+                <Copy size={14} className="mr-2" />
+                Copy Password
+              </Button>
+              <Button type="button" onClick={() => setCreatedStudentCredentials(null)}>
+                Done
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={Boolean(pendingDelete)}
+        onClose={() => setPendingDelete(null)}
+        title="Delete Student"
+      >
+        {pendingDelete ? (
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-600 dark:text-zinc-300">
+              Are you sure you want to delete <span className="font-medium">{pendingDelete.name}</span>? This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPendingDelete(null)}
+                disabled={deleteMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={confirmDelete}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </Modal>
 
       <p className="text-xs text-zinc-500">API coverage: GET /admin/students, POST /admin/students, PUT /admin/students/:id, DELETE /admin/students/:id</p>

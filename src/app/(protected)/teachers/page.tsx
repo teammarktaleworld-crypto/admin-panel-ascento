@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, ImageUp, Pencil, Plus, RefreshCcw, Search, Trash2, UserRound } from "lucide-react";
+import { Bot, Copy, ImageUp, Pencil, Plus, RefreshCcw, Search, Trash2, UserRound } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 
@@ -54,6 +54,12 @@ type TeacherFormState = {
   experienceYears: number;
   joiningDate: string;
   profilePhoto: string;
+};
+
+type CreatedTeacherCredentials = {
+  name: string;
+  email: string;
+  temporaryPassword: string;
 };
 
 function toRows(data: unknown): Array<Record<string, unknown>> {
@@ -145,6 +151,29 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+function readPath(source: unknown, path: string): unknown {
+  if (!source || typeof source !== "object") {
+    return undefined;
+  }
+
+  return path.split(".").reduce<unknown>((current, segment) => {
+    if (!current || typeof current !== "object") {
+      return undefined;
+    }
+    return (current as Record<string, unknown>)[segment];
+  }, source);
+}
+
+function pickString(source: unknown, paths: string[]): string {
+  for (const path of paths) {
+    const value = readPath(source, path);
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
 export default function TeachersPage() {
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (axios.isAxiosError(error)) {
@@ -163,6 +192,7 @@ export default function TeachersPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [domainFilter, setDomainFilter] = useState("all");
   const [form, setForm] = useState<TeacherFormState>(defaultTeacherForm());
+  const [createdTeacherCredentials, setCreatedTeacherCredentials] = useState<CreatedTeacherCredentials | null>(null);
   const queryClient = useQueryClient();
 
   const listQuery = useQuery({
@@ -185,9 +215,33 @@ export default function TeachersPage() {
 
   const createMutation = useMutation({
     mutationFn: async () => teachersApi.create(form),
-    onSuccess: async () => {
+    onSuccess: async (response) => {
+      const temporaryPassword = pickString(response, [
+        "temporaryPassword",
+        "tempPassword",
+        "password",
+        "credentials.temporaryPassword",
+        "credentials.tempPassword",
+        "credentials.password",
+        "user.temporaryPassword",
+        "user.tempPassword",
+      ]);
+      const name = pickString(response, ["name", "teacher.name", "user.name"]) || form.name;
+      const email = pickString(response, ["email", "teacher.email", "user.email"]) || form.email;
+
       toast.success("Teacher created");
       closeModal();
+
+      if (temporaryPassword) {
+        setCreatedTeacherCredentials({
+          name,
+          email,
+          temporaryPassword,
+        });
+      } else {
+        toast.warning("Teacher created, but temporary password was not returned by API.");
+      }
+
       await queryClient.invalidateQueries({ queryKey: ["teachers"] });
     },
     onError: (error) => toast.error(getErrorMessage(error, "Failed to create teacher")),
@@ -250,6 +304,19 @@ export default function TeachersPage() {
     setFormOpen(false);
     setEditingId("");
     setForm(defaultTeacherForm());
+  };
+
+  const handleCopyTemporaryPassword = async () => {
+    if (!createdTeacherCredentials?.temporaryPassword) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(createdTeacherCredentials.temporaryPassword);
+      toast.success("Temporary password copied");
+    } catch {
+      toast.error("Unable to copy password. Please copy it manually.");
+    }
   };
 
   const handleDelete = (row: TeacherRow) => {
@@ -538,8 +605,7 @@ export default function TeachersPage() {
         title={editingId ? "Update Teacher" : "Create Teacher"}
       >
         <form
-          className="grid max-h-full gap-3 overflow-y-auto pr-1 sm:grid-cols-2"
-          style={{ maxHeight: "75vh" }}
+          className="grid gap-3 sm:grid-cols-2"
           onSubmit={async (event) => {
             event.preventDefault();
 
@@ -700,6 +766,41 @@ export default function TeachersPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={Boolean(createdTeacherCredentials)}
+        onClose={() => setCreatedTeacherCredentials(null)}
+        title="Teacher Temporary Password"
+      >
+        {createdTeacherCredentials ? (
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-600 dark:text-zinc-300">
+              Share this password with <span className="font-medium">{createdTeacherCredentials.name || "the teacher"}</span> for first login.
+              This is shown only once.
+            </p>
+
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950/40">
+              <p className="text-xs uppercase tracking-wide text-amber-700 dark:text-amber-300">Email</p>
+              <p className="mt-1 break-all text-sm font-medium text-zinc-900 dark:text-zinc-100">{createdTeacherCredentials.email}</p>
+
+              <p className="mt-3 text-xs uppercase tracking-wide text-amber-700 dark:text-amber-300">Temporary Password</p>
+              <p className="mt-1 break-all rounded border border-amber-300 bg-white px-2 py-2 font-mono text-sm font-semibold text-zinc-900 dark:border-amber-700 dark:bg-zinc-950 dark:text-zinc-100">
+                {createdTeacherCredentials.temporaryPassword}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <Button type="button" variant="outline" onClick={handleCopyTemporaryPassword}>
+                <Copy size={14} className="mr-2" />
+                Copy Password
+              </Button>
+              <Button type="button" onClick={() => setCreatedTeacherCredentials(null)}>
+                Done
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </Modal>
 
     </div>

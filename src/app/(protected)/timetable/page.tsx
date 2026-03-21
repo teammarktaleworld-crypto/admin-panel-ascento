@@ -23,30 +23,124 @@ type Option = {
   label: string;
 };
 
+function readPath(source: unknown, path: string): unknown {
+  if (!source || typeof source !== "object") {
+    return undefined;
+  }
+
+  return path.split(".").reduce<unknown>((current, segment) => {
+    if (!current || typeof current !== "object") {
+      return undefined;
+    }
+    return (current as Record<string, unknown>)[segment];
+  }, source);
+}
+
+function extractId(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const candidate = obj._id ?? obj.id;
+    if (typeof candidate === "string") {
+      return candidate.trim();
+    }
+  }
+  return "";
+}
+
+function extractDisplayText(value: unknown): string {
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value).trim();
+  }
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const candidates = [obj.name, obj.code, obj.email, obj._id, obj.id];
+    for (const candidate of candidates) {
+      if (typeof candidate === "string" && candidate.trim().length > 0) {
+        return candidate.trim();
+      }
+      if (typeof candidate === "number") {
+        return String(candidate);
+      }
+    }
+  }
+  return "";
+}
+
+function resolveLabel(value: unknown, labelById: Record<string, string>) {
+  const id = extractId(value);
+  if (id && labelById[id]) {
+    return labelById[id];
+  }
+
+  const display = extractDisplayText(value);
+  if (display) {
+    return display;
+  }
+
+  return id || "-";
+}
+
+function pickId(source: unknown, paths: string[]): string {
+  for (const path of paths) {
+    const id = extractId(readPath(source, path));
+    if (id) {
+      return id;
+    }
+  }
+  return "";
+}
+
 function toRows(data: unknown): Array<Record<string, unknown>> {
   if (Array.isArray(data)) {
     return data as Array<Record<string, unknown>>;
   }
   if (data && typeof data === "object") {
-    const obj = data as { data?: unknown; items?: unknown };
+    const obj = data as { data?: unknown; items?: unknown; timetable?: unknown; entries?: unknown; slots?: unknown };
     if (Array.isArray(obj.data)) {
       return obj.data as Array<Record<string, unknown>>;
     }
     if (Array.isArray(obj.items)) {
       return obj.items as Array<Record<string, unknown>>;
     }
+    if (Array.isArray(obj.timetable)) {
+      return obj.timetable as Array<Record<string, unknown>>;
+    }
+    if (Array.isArray(obj.entries)) {
+      return obj.entries as Array<Record<string, unknown>>;
+    }
+    if (Array.isArray(obj.slots)) {
+      return obj.slots as Array<Record<string, unknown>>;
+    }
 
     if (obj.data && typeof obj.data === "object") {
-      const nested = obj.data as { data?: unknown; items?: unknown };
+      const nested = obj.data as { data?: unknown; items?: unknown; timetable?: unknown; entries?: unknown; slots?: unknown };
       if (Array.isArray(nested.data)) {
         return nested.data as Array<Record<string, unknown>>;
       }
       if (Array.isArray(nested.items)) {
         return nested.items as Array<Record<string, unknown>>;
       }
+      if (Array.isArray(nested.timetable)) {
+        return nested.timetable as Array<Record<string, unknown>>;
+      }
+      if (Array.isArray(nested.entries)) {
+        return nested.entries as Array<Record<string, unknown>>;
+      }
+      if (Array.isArray(nested.slots)) {
+        return nested.slots as Array<Record<string, unknown>>;
+      }
     }
   }
   return [];
+}
+
+function normalizeDay(day: unknown): string {
+  return String(day || "")
+    .trim()
+    .toLowerCase();
 }
 
 function mapOptions(rows: Array<Record<string, unknown>>, labelKeys: string[]): Option[] {
@@ -122,6 +216,7 @@ export default function TimetablePage() {
   const yearsQuery = useQuery({ queryKey: ["years", "timetable"], queryFn: () => yearsApi.list() });
   const subjectsQuery = useQuery({ queryKey: ["subjects", "timetable"], queryFn: () => subjectsApi.list() });
   const teachersQuery = useQuery({ queryKey: ["teachers", "timetable"], queryFn: () => teachersApi.list() });
+  const assignmentsQuery = useQuery({ queryKey: ["teacher-assignments", "timetable"], queryFn: () => teachersApi.assignments() });
 
   const timetableQuery = useQuery({
     queryKey: ["class-timetable", classId, sectionId, academicYearId],
@@ -144,6 +239,45 @@ export default function TimetablePage() {
   const yearOptions = useMemo(() => mapOptions(toRows(yearsQuery.data), ["name"]), [yearsQuery.data]);
   const subjectOptions = useMemo(() => mapOptions(toRows(subjectsQuery.data), ["name", "code"]), [subjectsQuery.data]);
   const teacherOptions = useMemo(() => mapOptions(toRows(teachersQuery.data), ["name", "email"]), [teachersQuery.data]);
+  const assignmentRows = useMemo(() => toRows(assignmentsQuery.data), [assignmentsQuery.data]);
+
+  const assignedTeacherIdSet = useMemo(() => {
+    const selectedClassId = String(form.classId || "").trim();
+    const selectedSectionId = String(form.sectionId || "").trim();
+    const selectedSubjectId = String(form.subjectId || "").trim();
+
+    if (!selectedClassId || !selectedSectionId || !selectedSubjectId || assignmentsQuery.isError) {
+      return new Set<string>();
+    }
+
+    const teacherIds = assignmentRows
+      .filter((row) => {
+        const classMatch = pickId(row, ["classId", "class"]) === selectedClassId;
+        const sectionMatch = pickId(row, ["sectionId", "section"]) === selectedSectionId;
+        const subjectMatch = pickId(row, ["subjectId", "subject"]) === selectedSubjectId;
+        const statusValue = String(readPath(row, "status") ?? "active").toLowerCase();
+        const isActive = statusValue === "active";
+        return classMatch && sectionMatch && subjectMatch && isActive;
+      })
+      .map((row) => pickId(row, ["teacherId", "teacher", "teacherDetails"]))
+      .filter((id) => id.length > 0);
+
+    return new Set(teacherIds);
+  }, [assignmentRows, assignmentsQuery.isError, form.classId, form.sectionId, form.subjectId]);
+
+  const filteredTeacherOptions = useMemo(() => {
+    const shouldFilter = !!form.classId && !!form.sectionId && !!form.subjectId && !assignmentsQuery.isError;
+    if (!shouldFilter) {
+      return teacherOptions;
+    }
+
+    const allowed = teacherOptions.filter((option) => assignedTeacherIdSet.has(option.id));
+    if (form.teacherId && !allowed.some((option) => option.id === form.teacherId)) {
+      const current = teacherOptions.find((option) => option.id === form.teacherId);
+      return current ? [current, ...allowed] : allowed;
+    }
+    return allowed;
+  }, [assignmentsQuery.isError, assignedTeacherIdSet, form.classId, form.sectionId, form.subjectId, form.teacherId, teacherOptions]);
 
   const subjectLabelById = useMemo(() => buildLabelMap(subjectOptions), [subjectOptions]);
   const teacherLabelById = useMemo(() => buildLabelMap(teacherOptions), [teacherOptions]);
@@ -157,13 +291,42 @@ export default function TimetablePage() {
       new Map(
         entries
           .filter((entry) => entry?.dayOfWeek && entry?.periodNumber)
-          .map((entry) => [`${entry.dayOfWeek}-${entry.periodNumber}`, entry]),
+          .map((entry) => [`${normalizeDay(entry.dayOfWeek)}-${entry.periodNumber}`, entry]),
       ),
     [entries],
   );
 
   const createMutation = useMutation({
-    mutationFn: timetableApi.create,
+    mutationFn: async (payload: TimetablePayload) => {
+      try {
+        return await timetableApi.create(payload);
+      } catch (error) {
+        const message = getErrorMessage(error, "").toLowerCase();
+        const needsAssignment =
+          message.includes("teacher must be assigned") ||
+          message.includes("assigned to this class") ||
+          message.includes("assign teacher");
+
+        if (!needsAssignment) {
+          throw error;
+        }
+
+        const academicYearValue = yearLabelById[payload.academicYearId] || payload.academicYearId;
+
+        await teachersApi.assignTeacher({
+          teacherId: payload.teacherId,
+          classId: payload.classId,
+          sectionId: payload.sectionId,
+          subjectId: payload.subjectId,
+          academicYear: academicYearValue,
+          status: "active",
+        });
+
+        toast.success("Teacher assignment created automatically");
+        await queryClient.invalidateQueries({ queryKey: ["teacher-assignments", "timetable"] });
+        return timetableApi.create(payload);
+      }
+    },
     onSuccess: async () => {
       toast.success("Timetable period created");
       await queryClient.invalidateQueries({ queryKey: ["class-timetable"] });
@@ -287,6 +450,31 @@ export default function TimetablePage() {
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
+    const palette = {
+      ink: rgb(0.1, 0.1, 0.12),
+      muted: rgb(0.42, 0.42, 0.45),
+      border: rgb(0.12, 0.12, 0.12),
+      softBorder: rgb(0.73, 0.73, 0.73),
+      panel: rgb(0.96, 0.9, 0.84),
+      panelStrong: rgb(0.9, 0.84, 0.76),
+      white: rgb(1, 1, 1),
+      sand: rgb(0.9, 0.8, 0.65),
+      clay: rgb(0.77, 0.5, 0.39),
+      sage: rgb(0.48, 0.65, 0.66),
+      blush: rgb(0.86, 0.79, 0.76),
+    };
+
+    let logoImage: Awaited<ReturnType<typeof pdfDoc.embedPng>> | null = null;
+    try {
+      const response = await fetch("/logo.png");
+      if (response.ok) {
+        const logoBytes = await response.arrayBuffer();
+        logoImage = await pdfDoc.embedPng(logoBytes);
+      }
+    } catch {
+      logoImage = null;
+    }
+
     const selectedClass = classLabelById[classId] || classId || "N/A";
     const selectedSection = sectionLabelById[sectionId] || (sectionId ? sectionId : "All");
     const selectedYear = yearLabelById[academicYearId] || academicYearId || "N/A";
@@ -295,80 +483,117 @@ export default function TimetablePage() {
     const occupancy = `${Math.round((filledSlots / Math.max(1, totalCells)) * 100)}%`;
     const generatedAt = new Date().toLocaleString();
 
+    page.drawRectangle({ x: 0, y: 0, width: 842, height: 595, color: palette.white });
+
+    page.drawEllipse({ x: 40, y: 552, xScale: 110, yScale: 90, color: palette.sand, opacity: 0.55 });
+    page.drawEllipse({ x: 795, y: 520, xScale: 120, yScale: 85, color: palette.clay, opacity: 0.55 });
+    page.drawEllipse({ x: 24, y: 30, xScale: 90, yScale: 65, color: palette.sage, opacity: 0.55 });
+    page.drawEllipse({ x: 745, y: 28, xScale: 110, yScale: 70, color: palette.blush, opacity: 0.65 });
+
+    page.drawText("WEEKLY SCHEDULE", { x: 52, y: 548, size: 32, font: fontBold, color: palette.ink });
+    page.drawText("Academic Timetable Report", { x: 56, y: 528, size: 12, font, color: palette.clay });
+    page.drawText(`Generated: ${generatedAt}`, { x: 56, y: 514, size: 8, font, color: palette.muted });
+
     page.drawRectangle({
-      x: 28,
-      y: 548,
-      width: 786,
-      height: 30,
-      color: rgb(0.1, 0.24, 0.62),
+      x: 620,
+      y: 512,
+      width: 192,
+      height: 68,
+      borderWidth: 1,
+      borderColor: palette.softBorder,
+      color: rgb(1, 1, 1),
     });
-    page.drawText("Academic Timetable Report", { x: 40, y: 558, size: 14, font: fontBold, color: rgb(1, 1, 1) });
-    page.drawText(`Generated: ${generatedAt}`, { x: 560, y: 558, size: 8, font, color: rgb(0.92, 0.95, 1) });
 
-    page.drawText(`Class: ${selectedClass}`, { x: 40, y: 534, size: 10, font: fontBold, color: rgb(0.16, 0.16, 0.16) });
-    page.drawText(`Section: ${selectedSection}`, { x: 260, y: 534, size: 10, font: fontBold, color: rgb(0.16, 0.16, 0.16) });
-    page.drawText(`Academic Year: ${selectedYear}`, { x: 470, y: 534, size: 10, font: fontBold, color: rgb(0.16, 0.16, 0.16) });
+    if (logoImage) {
+      const scale = Math.min(172 / logoImage.width, 52 / logoImage.height);
+      const width = logoImage.width * scale;
+      const height = logoImage.height * scale;
+      page.drawImage(logoImage, {
+        x: 620 + (192 - width) / 2,
+        y: 512 + (68 - height) / 2,
+        width,
+        height,
+      });
+    } else {
+      page.drawText("ASCENTO", { x: 680, y: 545, size: 14, font: fontBold, color: palette.ink });
+      page.drawText("ADMIN", { x: 696, y: 530, size: 10, font, color: palette.muted });
+    }
 
-    const summaryY = 500;
+    const metaY = 490;
+    page.drawRectangle({
+      x: 32,
+      y: metaY,
+      width: 778,
+      height: 24,
+      borderWidth: 1,
+      borderColor: palette.softBorder,
+      color: rgb(1, 1, 1),
+    });
+    page.drawText(`Class: ${selectedClass}`, { x: 46, y: metaY + 7, size: 10, font: fontBold, color: palette.ink });
+    page.drawText(`Section: ${selectedSection}`, { x: 290, y: metaY + 7, size: 10, font: fontBold, color: palette.ink });
+    page.drawText(`Academic Year: ${selectedYear}`, { x: 530, y: metaY + 7, size: 10, font: fontBold, color: palette.ink });
+
+    const summaryY = 454;
     [
       { title: "Total Slots", value: String(totalCells), x: 40 },
-      { title: "Filled Slots", value: String(filledSlots), x: 180 },
-      { title: "Occupancy", value: occupancy, x: 320 },
+      { title: "Filled Slots", value: String(filledSlots), x: 200 },
+      { title: "Occupancy", value: occupancy, x: 360 },
     ].forEach((item) => {
       page.drawRectangle({
         x: item.x,
         y: summaryY,
-        width: 120,
-        height: 28,
+        width: 144,
+        height: 30,
         borderWidth: 1,
-        borderColor: rgb(0.78, 0.82, 0.92),
-        color: rgb(0.96, 0.98, 1),
+        borderColor: palette.softBorder,
+        color: palette.panel,
       });
-      page.drawText(item.title, { x: item.x + 8, y: summaryY + 16, size: 7, font, color: rgb(0.35, 0.35, 0.35) });
-      page.drawText(item.value, { x: item.x + 8, y: summaryY + 6, size: 10, font: fontBold, color: rgb(0.1, 0.24, 0.62) });
+      page.drawText(item.title, { x: item.x + 8, y: summaryY + 18, size: 7, font, color: palette.muted });
+      page.drawText(item.value, { x: item.x + 8, y: summaryY + 6, size: 11, font: fontBold, color: palette.ink });
     });
 
     page.drawText("Cell format: Subject | Teacher | Time", {
-      x: 510,
-      y: summaryY + 11,
+      x: 572,
+      y: summaryY + 10,
       size: 8,
       font,
-      color: rgb(0.35, 0.35, 0.35),
+      color: palette.muted,
     });
 
     const startX = 30;
-    const startY = 468;
-    const dayColWidth = 72;
-    const periodColWidth = 91;
-    const rowHeight = 62;
+    const startY = 430;
+    const dayColWidth = 92;
+    const periodColWidth = 86.75;
+    const headerHeight = 30;
+    const rowHeight = 58;
 
     page.drawRectangle({
       x: startX,
-      y: startY - 24,
+      y: startY - headerHeight,
       width: dayColWidth,
-      height: 24,
+      height: headerHeight,
       borderWidth: 1,
-      borderColor: rgb(0.7, 0.7, 0.7),
-      color: rgb(0.94, 0.96, 1),
+      borderColor: palette.softBorder,
+      color: palette.panelStrong,
     });
-    page.drawText("Day", { x: startX + 8, y: startY - 16, size: 9, font: fontBold });
+    page.drawText("DAY", { x: startX + 10, y: startY - 19, size: 9, font: fontBold, color: palette.ink });
 
     periods.forEach((period, index) => {
       const x = startX + dayColWidth + index * periodColWidth;
       page.drawRectangle({
         x,
-        y: startY - 24,
+        y: startY - headerHeight,
         width: periodColWidth,
-        height: 24,
+        height: headerHeight,
         borderWidth: 1,
-        borderColor: rgb(0.7, 0.7, 0.7),
-        color: rgb(0.94, 0.96, 1),
+        borderColor: palette.softBorder,
+        color: palette.panelStrong,
       });
-      page.drawText(`P${period}`, { x: x + 8, y: startY - 16, size: 9, font: fontBold });
+      page.drawText(`P${period}`, { x: x + 34, y: startY - 19, size: 10, font: fontBold, color: palette.ink });
     });
 
     days.forEach((day, rowIndex) => {
-      const rowTop = startY - 24 - rowIndex * rowHeight;
+      const rowTop = startY - headerHeight - rowIndex * rowHeight;
       const rowBottom = rowTop - rowHeight;
 
       page.drawRectangle({
@@ -377,9 +602,10 @@ export default function TimetablePage() {
         width: dayColWidth,
         height: rowHeight,
         borderWidth: 1,
-        borderColor: rgb(0.75, 0.75, 0.75),
+        borderColor: palette.softBorder,
+        color: rowIndex % 2 === 0 ? palette.panel : rgb(0.98, 0.98, 0.98),
       });
-      page.drawText(prettyDay(day), { x: startX + 6, y: rowTop - 14, size: 8, font: fontBold });
+      page.drawText(prettyDay(day), { x: startX + 8, y: rowTop - 18, size: 10, font: fontBold, color: palette.ink });
 
       periods.forEach((period, colIndex) => {
         const x = startX + dayColWidth + colIndex * periodColWidth;
@@ -389,26 +615,46 @@ export default function TimetablePage() {
           width: periodColWidth,
           height: rowHeight,
           borderWidth: 1,
-          borderColor: rgb(0.85, 0.85, 0.85),
+          borderColor: palette.softBorder,
+          color: rowIndex % 2 === 0 ? rgb(1, 1, 1) : rgb(0.985, 0.985, 0.985),
         });
 
         const slot = gridMap.get(`${day}-${period}`);
-        const lines = slot
-          ? [
-              String(subjectLabelById[slot.subjectId] || slot.subjectId),
-              String(teacherLabelById[slot.teacherId] || slot.teacherId),
-              `${slot.startTime} - ${slot.endTime}`,
-            ]
-          : ["-"];
-
-        lines.slice(0, 3).forEach((line, lineIndex) => {
-          page.drawText(line.slice(0, 22), {
-            x: x + 4,
-            y: rowTop - 14 - lineIndex * 12,
-            size: 6.6,
-            font: lineIndex === 0 && slot ? fontBold : font,
-            color: rgb(0.15, 0.15, 0.15),
+        if (!slot) {
+          page.drawText("-", {
+            x: x + periodColWidth / 2 - 2,
+            y: rowTop - 28,
+            size: 9,
+            font,
+            color: palette.muted,
           });
+          return;
+        }
+
+        const subject = resolveLabel(slot.subjectId, subjectLabelById).slice(0, 18);
+        const teacher = resolveLabel(slot.teacherId, teacherLabelById).slice(0, 20);
+        const time = `${slot.startTime} - ${slot.endTime}`.slice(0, 20);
+
+        page.drawText(subject, {
+          x: x + 4,
+          y: rowTop - 15,
+          size: 8,
+          font: fontBold,
+          color: palette.ink,
+        });
+        page.drawText(teacher, {
+          x: x + 4,
+          y: rowTop - 28,
+          size: 7.2,
+          font,
+          color: palette.ink,
+        });
+        page.drawText(time, {
+          x: x + 4,
+          y: rowTop - 40,
+          size: 7,
+          font,
+          color: palette.muted,
         });
       });
     });
@@ -418,7 +664,7 @@ export default function TimetablePage() {
       y: 20,
       size: 7,
       font,
-      color: rgb(0.45, 0.45, 0.45),
+      color: palette.muted,
     });
 
     const safeClass = (classId || "class").slice(0, 12);
@@ -647,8 +893,8 @@ export default function TimetablePage() {
                       <td key={`${day}-${period}`} className="border px-2 py-2 align-top">
                         {item ? (
                           <div className="space-y-1">
-                            <p className="text-xs font-medium">{subjectLabelById[item.subjectId] || item.subjectId}</p>
-                            <p className="text-xs text-zinc-500">{teacherLabelById[item.teacherId] || item.teacherId}</p>
+                            <p className="text-xs font-medium">{resolveLabel(item.subjectId, subjectLabelById)}</p>
+                            <p className="text-xs text-zinc-500">{resolveLabel(item.teacherId, teacherLabelById)}</p>
                             <p className="text-xs text-zinc-500">
                               {item.startTime}-{item.endTime}
                             </p>
@@ -753,12 +999,15 @@ export default function TimetablePage() {
               <p className="mb-1 text-xs text-zinc-500">Teacher</p>
               <Select value={form.teacherId} onChange={(e) => setForm((prev) => ({ ...prev, teacherId: e.target.value }))} disabled={isSaving}>
                 <option value="">Select Teacher</option>
-                {teacherOptions.map((option) => (
+                {filteredTeacherOptions.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.label}
                   </option>
                 ))}
               </Select>
+              {!assignmentsQuery.isError && form.classId && form.sectionId && form.subjectId && filteredTeacherOptions.length === 0 ? (
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">No teacher assignment found for selected class, section, and subject.</p>
+              ) : null}
             </div>
           </div>
 

@@ -55,7 +55,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen">
         <aside
           className={cn(
-            "fixed inset-y-0 left-0 z-50 w-72 border-r border-zinc-200 bg-white/95 p-4 backdrop-blur transition-transform dark:border-zinc-800 dark:bg-zinc-950/95 lg:static lg:translate-x-0",
+            "fixed inset-y-0 left-0 z-50 w-72 overflow-y-auto border-r border-zinc-200 bg-white/95 p-4 backdrop-blur transition-transform dark:border-zinc-800 dark:bg-zinc-950/95 lg:translate-x-0",
             open ? "translate-x-0" : "-translate-x-full",
           )}
         >
@@ -71,7 +71,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <X size={18} />
             </button>
           </div>
-          <nav className="space-y-1">
+          <nav className="space-y-1 pb-2">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = pathname === item.href;
@@ -96,7 +96,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
         </aside>
 
-        <div className="flex w-full flex-col lg:pl-0">
+        <div className="flex w-full flex-col lg:pl-72">
           <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/90 sm:px-6">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
